@@ -35,6 +35,10 @@
                                     CAPICOM_STORE_OPEN_MAXIMUM_ALLOWED);
 
                                 var oStoreCerts = yield oStore.Certificates;
+                                var oStoreCertsCount = yield oStore.Certificates.Count;
+
+                                alert(oStoreCertsCount);
+
                                 var oCertificates = yield oStoreCerts.Find(
                                     CAPICOM_CERTIFICATE_FIND_SUBJECT_NAME, certSubjectName);
                                 var certsCount = yield oCertificates.Count;
