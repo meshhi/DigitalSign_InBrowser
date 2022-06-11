@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script language="javascript" src="cadesplugin_api.js"></script>
+</head>
+
+<body>
+
+    <div id="item_border" name="CertListBoxToHide">
+        <select size="8" name="CertListBox" id="CertListBox" style="width:100%;resize:none;border:0;"></select>
+    </div>
+
+    <script>
+        var canPromise = !!window.Promise;
+        if (canPromise) {
+            cadesplugin.then(function() {
+                    // прикладной код
+                    var CADESCOM_CADES_BES = 1;
+                    var CAPICOM_CURRENT_USER_STORE = 2;
+                    var CAPICOM_MY_STORE = "My";
+                    var CAPICOM_STORE_OPEN_MAXIMUM_ALLOWED = 2;
+                    var CAPICOM_CERTIFICATE_FIND_SUBJECT_NAME = 1;
+                    var CADESCOM_BASE64_TO_BINARY = 1;
+
+                    function SignCreate(certSubjectName, dataInBase64) {
+                        return new Promise(function(resolve, reject) {
+                            cadesplugin.async_spawn(function*(args) {
+                                var oStore = yield cadesplugin.CreateObjectAsync("CAdESCOM.Store");
+                                yield oStore.Open(CAPICOM_CURRENT_USER_STORE, CAPICOM_MY_STORE,
+                                    CAPICOM_STORE_OPEN_MAXIMUM_ALLOWED);
+
+                                var oStoreCerts = yield oStore.Certificates;
+                                var oCertificates = yield oStoreCerts.Find(
+                                    CAPICOM_CERTIFICATE_FIND_SUBJECT_NAME, certSubjectName);
+                                var certsCount = yield oCertificates.Count;
+                                if (certsCount === 0) {
+                                    err = "Certificate not found: " + certSubjectName;
+                                    alert(err);
+                                    return args[1](err);
+                                }
+                                var oCertificate = yield oCertificates.Item(1);
+                                var oSigner = yield cadesplugin.CreateObjectAsync("CAdESCOM.CPSigner");
+                                yield oSigner.propset_Certificate(oCertificate);
+                                yield oSigner.propset_CheckCertificate(true);
+
+                                var oSignedData = yield cadesplugin.CreateObjectAsync("CAdESCOM.CadesSignedData");
+                                // Значение свойства ContentEncoding должно быть задано
+                                // до заполнения свойства Content
+                                yield oSignedData.propset_ContentEncoding(CADESCOM_BASE64_TO_BINARY);
+                                yield oSignedData.propset_Content(dataInBase64);
+
+                                var sSignedMessage = "";
+                                try {
+                                    sSignedMessage = yield oSignedData.SignCades(oSigner, CADESCOM_CADES_BES, true);
+                                } catch (err) {
+                                    e = cadesplugin.getLastError(err);
+                                    alert("Failed to create signature. Error: " + e);
+                                    return args[1](e);
+                                }
+
+                                yield oStore.Close();
+                                return args[0](sSignedMessage);
+                            }, resolve, reject);
+                        });
+                    }
+
+                    function Verify(sSignedMessage, dataInBase64) {
+                        return new Promise(function(resolve, reject) {
+                            cadesplugin.async_spawn(function*(args) {
+                                var oSignedData = yield cadesplugin.CreateObjectAsync("CAdESCOM.CadesSignedData");
+                                try {
+                                    // Значение свойства ContentEncoding должно быть задано
+                                    // до заполнения свойства Content
+                                    yield oSignedData.propset_ContentEncoding(CADESCOM_BASE64_TO_BINARY);
+                                    yield oSignedData.propset_Content(dataInBase64);
+                                    yield oSignedData.VerifyCades(sSignedMessage, CADESCOM_CADES_BES, true);
+                                } catch (err) {
+                                    var e = cadesplugin.getLastError(err);
+                                    alert("Failed to verify signature. Error: " + e);
+                                    return args[1](e);
+                                }
+                                return args[0]();
+                            }, resolve, reject);
+                        });
+                    }
+
+                    function run() {
+                        // var oCertName = document.getElementById("CertName");
+                        // var sCertName = oCertName.value; // Здесь следует заполнить SubjectName сертификата
+                        var sCertName = "test";
+                        if ("" === sCertName) {
+                            alert("Введите имя сертификата (CN).");
+                            return;
+                        }
+                        // Предварительно закодированные в BASE64 бинарные данные
+                        // В данном случае закодирована строка "Some Data."
+                        var dataInBase64 = "U29tZSBEYXRhLg==";
+
+                        // Подписаны будут исходные бинарные данные (в данном случае - "Some Data.")
+                        // Такая подпись должна проверяться в КриптоАРМ и cryptcp.exe
+
+                        SignCreate(sCertName, dataInBase64).then(
+                            function(signedMessage) {
+                                // document.getElementById("signature").innerHTML = signedMessage;
+                                Verify(signedMessage, dataInBase64).then(
+                                    function() {
+                                        alert("Signature verified");
+                                    },
+                                    function(err) {
+                                        document.getElementById("signature").innerHTML = err;
+                                    });
+                            },
+                            function(err) {
+                                document.getElementById("signature").innerHTML = err;
+                            }
+                        );
+                    }
+
+                    run();
+                },
+                function(error) {
+                    // сообщение об ошибке
+                    console.error(error);
+                }
+            );
+        } else {
+            window.addEventListener("message", function(event) {
+                    if (event.data == "cadesplugin_loaded") {
+                        // прикладной код
+                    } else if (event.data == "cadesplugin_load_error") {
+                        // сообщение об ошибке
+                    }
+                },
+                false);
+            window.postMessage("cadesplugin_echo_request", "*");
+        }
+    </script>
+</body>
+
+</html>
